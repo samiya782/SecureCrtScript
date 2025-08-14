@@ -5,13 +5,13 @@
 #
 # 描述:
 #   演示如何以设定的时间间隔重复运行一个命令，并将输出
-#   同时记录到一个专门的日志标签页和一个本地文件中。
+#   记录到一个本地文件中。
 #
 #   此脚本将无限期运行，直到会话断开或用户
 #   手动停止脚本（通过菜单 "Script" -> "Cancel"）。
-
-#   此版本使用了 'securecrt_utils' 模块来处理日志记录和
-#   其他通用功能，使得主脚本更简洁，专注于核心逻辑。
+#
+#   此版本将日志记录和一些通用功能封装在类和函数中，
+#   使得主脚本更简洁，专注于核心逻辑。
 
 import os
 import time
@@ -21,20 +21,18 @@ import re
 class SecureCRTLogger:
     """
     一个可插拔的日志记录类，用于在 SecureCRT 脚本中记录信息。
-    它可以将日志同时输出到一个专用的日志标签页和一个本地文件中。
+    它将日志输出到一个本地文件中。
     """
 
-    def __init__(self, crt_object, log_tab_name="SCRIPT_LOG_WINDOW", log_file_path=None, clear_log_file_on_start=True):
+    def __init__(self, crt_object, log_file_path=None, clear_log_file_on_start=True):
         """
         初始化日志记录器。
 
         :param crt_object: SecureCRT 全局的 'crt' 对象。
-        :param log_tab_name: 用于显示日志的标签页名称。
         :param log_file_path: 本地日志文件的完整路径。如果为 None，将自动生成一个。
         :param clear_log_file_on_start: 是否在脚本开始时清空旧的日志文件。
         """
         self.crt = crt_object
-        self.log_tab_name = log_tab_name
         if log_file_path is None:
             self.log_file_path = os.path.join(os.path.expanduser('~'), 'Documents', 'securecrt_script_log.txt')
         else:
@@ -43,39 +41,10 @@ class SecureCRTLogger:
         self.log_tab = None
         self.is_ready = False
 
-        if not self._setup_log_window():
-            # _setup_log_window 会显示错误，这里我们只停止初始化
-            return
-
         if clear_log_file_on_start:
             self._prepare_log_file()
 
         self.is_ready = True
-
-    def _setup_log_window(self):
-        """查找或创建一个专用的标签页用于显示日志。"""
-        for i in range(1, self.crt.GetTabCount() + 1):
-            tab = self.crt.GetTab(i)
-            if tab.Caption == self.log_tab_name:
-                self.log_tab = tab
-                self.log_tab.Activate()
-                self.log_tab.Screen.Send(chr(12))  # 发送 Form Feed (Ctrl+L) 清屏
-                return True
-
-        try:
-            connect_string = f"/S \"{self.log_tab_name}\""
-            self.log_tab = self.crt.Session.ConnectInTab(connect_string)
-        except Exception:
-            error_msg = self.crt.GetLastErrorMessage()
-            self.crt.Dialog.MessageBox(
-                f"警告：无法创建日志窗口 '{self.log_tab_name}'。\n\n"
-                f"错误: {error_msg}\n\n"
-                f"日志将仅写入本地文件: {self.log_file_path}\n\n"
-                f"(提示: 要启用日志窗口，请预先创建一个名为 '{self.log_tab_name}' 的 'Local Shell' 会话)"
-            )
-            self.log_tab = None
-
-        return True
 
     def _prepare_log_file(self):
         """如果文件存在，则删除旧的日志文件，为新的日志做准备。"""
@@ -86,7 +55,7 @@ class SecureCRTLogger:
             self.crt.Dialog.MessageBox(f"警告：无法删除旧的日志文件。\n\n路径: {self.log_file_path}\n原因: {str(e)}")
 
     def log(self, message):
-        """将带时间戳的消息写入日志文件和日志标签页。"""
+        """将带时间戳的消息写入日志文件。"""
         if not self.is_ready:
             return
 
@@ -103,12 +72,6 @@ class SecureCRTLogger:
             if not hasattr(self, '_file_error_shown'):
                 self.crt.Dialog.MessageBox(f"错误：无法写入日志文件！\n\n路径: {self.log_file_path}\n原因: {str(e)}")
                 self._file_error_shown = True
-
-        if self.log_tab and self.log_tab.Session.Connected:
-            try:
-                self.log_tab.Screen.Send(timestamped_message + "\n")
-            except Exception:
-                self.log_tab = None
 
 
 def clean_ansi_codes(text):
@@ -155,11 +118,6 @@ LOOP_INTERVAL_SECONDS = 5
 
 # 日志文件的保存路径。脚本每次运行时会覆盖旧的日志文件。
 LOG_FILE_PATH = os.path.join(os.path.expanduser('~'), 'Documents', 'securecrt_monitor_log.txt')
-
-# 用于显示日志的专用标签页的名称。
-# 提示: 请预先在 SecureCRT 中创建一个名为 "SCRIPT_LOG_WINDOW" 的 "Local Shell" 会话
-# 以便日志能正常显示在专用标签页中。
-LOG_WINDOW_NAME = "SCRIPT_LOG_WINDOW"
 # --------------
 
 def main():
@@ -176,7 +134,7 @@ def main():
 
     # 1. 初始化日志记录器
     # 使用 securecrt_utils 模块中的 SecureCRTLogger 类
-    logger = SecureCRTLogger(crt, LOG_WINDOW_NAME, LOG_FILE_PATH)
+    logger = SecureCRTLogger(crt, LOG_FILE_PATH)
     if not logger.is_ready:
         # 初始化失败时，构造函数已经显示了错误信息
         return
@@ -188,9 +146,7 @@ def main():
     # 3. 提示用户如何使用
     crt.Dialog.MessageBox(
         f"脚本即将开始监控。\n\n"
-        f"日志将同时输出到：\n"
-        f"1. 文件: {LOG_FILE_PATH}\n"
-        f"2. 标签页: '{LOG_WINDOW_NAME}'\n\n"
+        f"日志将写入文件: {LOG_FILE_PATH}\n\n"
         "要停止脚本，请从菜单选择 'Script' -> 'Cancel'。")
 
     logger.log("脚本开始执行。")

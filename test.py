@@ -4,7 +4,6 @@
 import pandas as pd
 import time
 
-
 def main():
     # f = open("C:\\Users\\yjjdd\\Downloads\\test.txt", 'a')
     # f.write('1')
@@ -37,7 +36,7 @@ def main():
             for line in res.splitlines():
                 if line.strip().startswith("description"):
                     idx = line.index("AH-HF-")
-                    line = line[idx + 6:]
+                    line = line[idx + 6 :]
                     idx = line.index('.')
                     ret = line[: idx]
         # elif ret == 'D':
@@ -51,10 +50,8 @@ def main():
         #         if line.strip().startswith("description"):
         #             ret = line.strip()
         cr.append(ret)
-
+        
     # crt.Dialog.MessageBox(str(cr))
     hostInfo['CR'] = cr
     hostInfo.to_excel(str(int(time.time())) + '.xlsx', index=False)
-
-
 main()
